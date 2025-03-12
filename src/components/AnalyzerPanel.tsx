@@ -10,7 +10,7 @@ import {
   CardTitle 
 } from '@/components/ui/card';
 import { SystemModel, AnalysisResults, Component } from '@/types/system';
-import { calculateBDRInterface, applyHalfHalfAlgorithm } from '@/utils/schedulingFunctions';
+import { calculateBDRInterface, applyHalfHalfAlgorithm, isComponentSchedulable } from '@/utils/schedulingFunctions';
 
 interface AnalyzerPanelProps {
   systemModel: SystemModel | null;
@@ -35,13 +35,43 @@ const AnalyzerPanel: React.FC<AnalyzerPanelProps> = ({ systemModel }) => {
     
     try {
       // Simple timeout to simulate processing
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       const componentInterfaces: AnalysisResults['componentInterfaces'] = [];
       let isSystemSchedulable = true;
       
+      // Pre-check utilization for quick fail
+      for (const component of systemModel.rootComponents) {
+        const totalUtil = component.tasks.reduce((sum, task) => {
+          if ('period' in task) {
+            return sum + task.wcet / task.period;
+          } else if ('minimumInterArrivalTime' in task) {
+            return sum + task.wcet / task.minimumInterArrivalTime;
+          }
+          return sum;
+        }, 0);
+        
+        console.log(`Component ${component.id} total utilization: ${totalUtil}`);
+        if (totalUtil > 1) {
+          isSystemSchedulable = false;
+          break;
+        }
+      }
+      
       // Process each component to calculate its BDR interface
       const processComponent = (component: Component) => {
+        // Set default values if not present
+        component.alpha = component.alpha || 1;
+        component.delta = component.delta || 0;
+        
+        // First check directly if schedulable with current parameters
+        const componentSchedulable = isComponentSchedulable(component);
+        
+        // If not directly schedulable, try to calculate BDR interface
+        if (!componentSchedulable) {
+          isSystemSchedulable = false;
+        }
+        
         // Calculate BDR interface parameters for this component
         const { alpha, delta } = calculateBDRInterface(component);
         
@@ -92,6 +122,7 @@ const AnalyzerPanel: React.FC<AnalyzerPanelProps> = ({ systemModel }) => {
         variant: isSystemSchedulable ? "default" : "destructive"
       });
     } catch (error) {
+      console.error("Analysis error:", error);
       toast({
         title: "Analysis Failed",
         description: error instanceof Error ? error.message : "Unknown error occurred",

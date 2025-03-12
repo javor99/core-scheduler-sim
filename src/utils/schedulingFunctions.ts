@@ -1,3 +1,4 @@
+
 /**
  * Core scheduling functions for demand bound and supply bound calculations
  */
@@ -19,13 +20,13 @@ const isSporadic = (task: Task): task is SporadicTask => {
 export const calculateDBFforEDF = (tasks: Task[], t: number): number => {
   return tasks.reduce((totalDemand, task) => {
     if (isPeriodic(task)) {
-      // For periodic tasks, calculate floor((t + Ti - Di)/Ti) * Ci
-      const numJobs = Math.floor((t + task.period - task.deadline) / task.period);
-      return totalDemand + Math.max(0, numJobs * task.wcet);
+      // For periodic tasks with deadline <= period (constrained)
+      const numJobs = Math.max(0, Math.floor((t - task.deadline) / task.period) + 1);
+      return totalDemand + numJobs * task.wcet;
     } else if (isSporadic(task)) {
-      // For sporadic tasks
-      const numJobs = Math.floor((t + task.minimumInterArrivalTime - task.deadline) / task.minimumInterArrivalTime);
-      return totalDemand + Math.max(0, numJobs * task.wcet);
+      // For sporadic tasks with deadline <= minimumInterArrivalTime (constrained)
+      const numJobs = Math.max(0, Math.floor((t - task.deadline) / task.minimumInterArrivalTime) + 1);
+      return totalDemand + numJobs * task.wcet;
     }
     return totalDemand;
   }, 0);
@@ -82,16 +83,6 @@ export const isComponentSchedulable = (component: Component): boolean => {
     tasks.sort((a, b) => (a.priority || 0) - (b.priority || 0));
   }
 
-  // Calculate hyperperiod and critical instant
-  const hyperperiod = tasks.reduce((lcm, task) => {
-    const period = isPeriodic(task) 
-      ? task.period 
-      : isSporadic(task) 
-        ? task.minimumInterArrivalTime 
-        : 1;
-    return lcm * period / gcd(lcm, period);
-  }, 1);
-
   // Calculate utilization
   const utilization = tasks.reduce((sum, task) => {
     if (isPeriodic(task)) {
@@ -107,27 +98,46 @@ export const isComponentSchedulable = (component: Component): boolean => {
     return false;
   }
 
-  // Check schedulability over the hyperperiod
-  const checkPoints = tasks.reduce((points, task) => {
-    const deadline = task.deadline;
-    for (let t = deadline; t <= hyperperiod; t += task.period) {
-      points.add(t);
+  // For EDF, calculate hyperperiod from task periods
+  let hyperperiod = 1;
+  for (const task of tasks) {
+    const taskPeriod = isPeriodic(task) ? task.period : isSporadic(task) ? task.minimumInterArrivalTime : 1;
+    hyperperiod = lcm(hyperperiod, taskPeriod);
+  }
+  
+  // For practical reasons, limit the hyperperiod to a reasonable value
+  const maxCheckTime = Math.min(hyperperiod, 1000);
+  
+  // Generate checkpoints at task deadlines
+  const checkPoints = new Set<number>();
+  for (const task of tasks) {
+    let deadline = task.deadline;
+    while (deadline <= maxCheckTime) {
+      checkPoints.add(deadline);
+      if (isPeriodic(task)) {
+        deadline += task.period;
+      } else if (isSporadic(task)) {
+        deadline += task.minimumInterArrivalTime;
+      } else {
+        break;
+      }
     }
-    return points;
-  }, new Set<number>());
+  }
 
   // Check demand bound function at each scheduling point
-  for (const t of Array.from(checkPoints)) {
+  for (const t of Array.from(checkPoints).sort((a, b) => a - b)) {
     if (component.schedulingAlgorithm === 'EDF') {
       const demand = calculateDBFforEDF(tasks, t);
-      const supply = t * (component.alpha || 1);
+      const supply = calculateSBFforBDR(component.alpha || 1, component.delta || 0, t);
+      
       if (demand > supply) {
         return false;
       }
     } else if (component.schedulingAlgorithm === 'FPS') {
       for (let i = 0; i < tasks.length; i++) {
         const demand = calculateDBFforFPS(tasks, t, i);
-        const supply = t * (component.alpha || 1);
+        const supply = calculateSBFforBDR(component.alpha || 1, component.delta || 0, t);
+        
         if (demand > supply) {
           return false;
         }
@@ -146,6 +156,11 @@ const gcd = (a: number, b: number): number => {
     a = temp;
   }
   return a;
+};
+
+// Helper function for calculating LCM
+const lcm = (a: number, b: number): number => {
+  return (a * b) / gcd(a, b);
 };
 
 /**
