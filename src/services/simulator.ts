@@ -10,7 +10,8 @@ import {
   SporadicTask,
   SimulationResults,
   TaskResponseTime,
-  ComponentUtilization
+  ComponentUtilization,
+  TaskExecutionLog
 } from "@/types/system";
 
 interface SimulationEvent {
@@ -41,6 +42,8 @@ interface SimulationState {
   missedDeadlinesByTask: Map<string, number>;
   executionTimeByComponent: Map<string, number>;
   resourceAvailableByComponent: Map<string, boolean>;
+  executionLogs: TaskExecutionLog[];
+  taskExecutionStart: Map<string, number>; // Track when each task instance started execution
 }
 
 /**
@@ -48,7 +51,8 @@ interface SimulationState {
  */
 export const runSimulation = (
   systemModel: SystemModel, 
-  simulationTime: number
+  simulationTime: number,
+  detailedLogging: boolean = false
 ): SimulationResults => {
   // Setup initial simulation state
   const state: SimulationState = {
@@ -61,6 +65,8 @@ export const runSimulation = (
     missedDeadlinesByTask: new Map(),
     executionTimeByComponent: new Map(),
     resourceAvailableByComponent: new Map(),
+    executionLogs: [],
+    taskExecutionStart: new Map()
   };
   
   // Initialize missed deadlines counter for each task
@@ -151,7 +157,8 @@ export const runSimulation = (
     taskResponseTimes,
     componentUtilizations,
     simulationTime,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    executionLogs: detailedLogging ? state.executionLogs : undefined
   };
 };
 
@@ -170,16 +177,26 @@ const handleTaskArrival = (
   const { task, component, core } = taskInfo;
   
   // Calculate adjusted execution time based on core performance
-  const adjustedExecutionTime = task.wcet / (core?.performanceFactor || 1);
+  // Use a random value between BCET and WCET if BCET is provided
+  let executionTime;
+  if (task.bcet !== undefined) {
+    // Random execution time between BCET and WCET, adjusted for core performance
+    executionTime = (task.bcet + Math.random() * (task.wcet - task.bcet)) / (core?.performanceFactor || 1);
+  } else {
+    // Just use WCET adjusted for core performance
+    executionTime = task.wcet / (core?.performanceFactor || 1);
+  }
+  
+  const instanceId = Math.floor(Math.random() * 1000000); // Unique identifier for this instance
   
   // Create a new task instance
   const taskInstance: TaskInstance = {
     taskId: task.id,
-    instanceId: Math.floor(Math.random() * 1000000), // Unique identifier for this instance
+    instanceId,
     componentId: component.id,
     arrivalTime: event.time,
-    executionTime: adjustedExecutionTime,
-    remainingTime: adjustedExecutionTime,
+    executionTime,
+    remainingTime: executionTime,
     deadline: event.time + task.deadline,
     priority: task.priority
   };
@@ -234,6 +251,27 @@ const handleTaskDeadline = (event: SimulationEvent, state: SimulationState) => {
     // Task has missed its deadline
     const missedCount = state.missedDeadlinesByTask.get(event.taskId) || 0;
     state.missedDeadlinesByTask.set(event.taskId, missedCount + 1);
+    
+    // Add to execution logs if this task started execution
+    const taskInstanceKey = isActive 
+      ? `${state.activeTask!.taskId}-${state.activeTask!.instanceId}`
+      : state.readyQueue.find(t => t.taskId === event.taskId)?.taskId + "-" + 
+        state.readyQueue.find(t => t.taskId === event.taskId)?.instanceId;
+    
+    const startTime = state.taskExecutionStart.get(taskInstanceKey!);
+    if (startTime !== undefined) {
+      state.executionLogs.push({
+        taskId: event.taskId,
+        componentId: event.componentId,
+        instanceId: parseInt(taskInstanceKey!.split('-')[1]),
+        arrivalTime: isActive ? state.activeTask!.arrivalTime : 
+                   state.readyQueue.find(t => t.taskId === event.taskId)!.arrivalTime,
+        startTime,
+        endTime: state.currentTime, // Still running at deadline
+        deadline: event.time,
+        missedDeadline: true
+      });
+    }
   }
 };
 
@@ -259,6 +297,23 @@ const handleTaskCompletion = (
   responseTimeArray.push(responseTime);
   state.responseTimeByTask.set(completedTask.taskId, responseTimeArray);
   
+  // Add to execution logs
+  const taskInstanceKey = `${completedTask.taskId}-${completedTask.instanceId}`;
+  const startTime = state.taskExecutionStart.get(taskInstanceKey);
+  
+  if (startTime !== undefined) {
+    state.executionLogs.push({
+      taskId: completedTask.taskId,
+      componentId: completedTask.componentId,
+      instanceId: completedTask.instanceId,
+      arrivalTime: completedTask.arrivalTime,
+      startTime,
+      endTime: state.currentTime,
+      deadline: completedTask.deadline,
+      missedDeadline: state.currentTime > completedTask.deadline
+    });
+  }
+  
   // Clear active task
   state.activeTask = null;
 };
@@ -278,6 +333,26 @@ const handleResourceSupplyEnd = (event: SimulationEvent, state: SimulationState)
   
   // If the active task belongs to this component, preempt it
   if (state.activeTask && state.activeTask.componentId === event.componentId) {
+    // Log execution up to this point before preemption
+    const taskInstanceKey = `${state.activeTask.taskId}-${state.activeTask.instanceId}`;
+    const startTime = state.taskExecutionStart.get(taskInstanceKey);
+    
+    if (startTime !== undefined) {
+      state.executionLogs.push({
+        taskId: state.activeTask.taskId,
+        componentId: state.activeTask.componentId,
+        instanceId: state.activeTask.instanceId,
+        arrivalTime: state.activeTask.arrivalTime,
+        startTime,
+        endTime: state.currentTime,
+        deadline: state.activeTask.deadline,
+        missedDeadline: false // Not missed yet, just preempted
+      });
+      
+      // Remove the start time so we'll track a new execution segment if this task runs again
+      state.taskExecutionStart.delete(taskInstanceKey);
+    }
+    
     state.readyQueue.push(state.activeTask);
     state.activeTask = null;
   }
@@ -336,6 +411,10 @@ const scheduleNextTask = (state: SimulationState, systemModel: SystemModel) => {
     
     // Set as active task
     state.activeTask = selectedTask;
+    
+    // Record execution start time for this task instance
+    const taskInstanceKey = `${selectedTask.taskId}-${selectedTask.instanceId}`;
+    state.taskExecutionStart.set(taskInstanceKey, state.currentTime);
     
     // Schedule completion event
     state.events.push({

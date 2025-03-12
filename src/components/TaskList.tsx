@@ -21,6 +21,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, title }) => {
             <tr className="bg-gray-100">
               <th className="p-2 text-left">Name</th>
               <th className="p-2 text-left">Type</th>
+              <th className="p-2 text-left">BCET</th>
               <th className="p-2 text-left">WCET</th>
               <th className="p-2 text-left">Deadline</th>
               <th className="p-2 text-left">Period/MIT</th>
@@ -32,6 +33,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, title }) => {
               <tr key={task.id} className="border-t hover:bg-gray-50">
                 <td className="p-2">{task.name}</td>
                 <td className="p-2">{task.type}</td>
+                <td className="p-2">{task.bcet || '-'}</td>
                 <td className="p-2">{task.wcet}</td>
                 <td className="p-2">{task.deadline}</td>
                 <td className="p-2">

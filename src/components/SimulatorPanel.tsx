@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/components/ui/use-toast';
 import { SystemModel, SimulationResults } from '@/types/system';
 import CoreVisualizer from './CoreVisualizer';
@@ -12,7 +13,7 @@ import SimulationResultsView from './SimulationResultsView';
 
 interface SimulatorPanelProps {
   systemModel: SystemModel | null;
-  onRunSimulation: (simulationTime: number) => Promise<SimulationResults>;
+  onRunSimulation: (simulationTime: number, detailedLogging: boolean) => Promise<SimulationResults>;
 }
 
 const SimulatorPanel: React.FC<SimulatorPanelProps> = ({ 
@@ -20,6 +21,7 @@ const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
   onRunSimulation 
 }) => {
   const [simulationTime, setSimulationTime] = useState(1000);
+  const [detailedLogging, setDetailedLogging] = useState(true);
   const [isSimulating, setIsSimulating] = useState(false);
   const [results, setResults] = useState<SimulationResults | null>(null);
   const { toast } = useToast();
@@ -36,7 +38,7 @@ const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
 
     setIsSimulating(true);
     try {
-      const results = await onRunSimulation(simulationTime);
+      const results = await onRunSimulation(simulationTime, detailedLogging);
       setResults(results);
       toast({
         title: "Simulation Complete",
@@ -59,7 +61,7 @@ const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
         <h2 className="text-2xl font-bold mb-4">Simulator</h2>
         
         <div className="space-y-4 mb-6">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="simulation-time">Simulation Time</Label>
               <Input
@@ -82,6 +84,20 @@ const SimulatorPanel: React.FC<SimulatorPanelProps> = ({
                 step={1}
               />
             </div>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="detailed-logging" 
+              checked={detailedLogging} 
+              onCheckedChange={(checked) => setDetailedLogging(checked === true)}
+            />
+            <Label htmlFor="detailed-logging">
+              Enable Detailed Execution Logging
+              <p className="text-sm text-gray-500">
+                Tracks task execution for timeline visualization. May slow down simulation.
+              </p>
+            </Label>
           </div>
           
           <Button 

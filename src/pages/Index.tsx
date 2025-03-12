@@ -19,14 +19,14 @@ const Index: React.FC = () => {
     setSystemModel(model);
   };
 
-  const handleRunSimulation = async (simulationTime: number): Promise<SimulationResults> => {
+  const handleRunSimulation = async (simulationTime: number, detailedLogging: boolean = false): Promise<SimulationResults> => {
     if (!systemModel) {
       throw new Error("No system model loaded");
     }
     
     // Run simulation with current model
     try {
-      return runSimulation(systemModel, simulationTime);
+      return runSimulation(systemModel, simulationTime, detailedLogging);
     } catch (error) {
       console.error("Simulation error:", error);
       toast({

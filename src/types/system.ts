@@ -14,6 +14,7 @@ export interface Core {
 export interface Task {
   id: string;
   name: string;
+  bcet?: number; // Best-case execution time (on a reference core with performanceFactor=1)
   wcet: number; // Worst-case execution time (on a reference core with performanceFactor=1)
   deadline: number;
   priority?: number; // Used for FPS scheduling
@@ -49,6 +50,18 @@ export interface SystemModel {
   rootComponents: Component[]; // Top-level components, one per core
 }
 
+// Execution logs for visualization
+export interface TaskExecutionLog {
+  taskId: string;
+  componentId: string;
+  instanceId: number;
+  arrivalTime: number;
+  startTime: number;
+  endTime: number;
+  deadline: number;
+  missedDeadline: boolean;
+}
+
 // Simulation result types
 export interface TaskResponseTime {
   taskId: string;
@@ -68,6 +81,7 @@ export interface SimulationResults {
   componentUtilizations: ComponentUtilization[];
   simulationTime: number; // Total simulation time
   timestamp: string; // When the simulation was run
+  executionLogs?: TaskExecutionLog[]; // Detailed execution logs for visualization
 }
 
 // Analysis result types
