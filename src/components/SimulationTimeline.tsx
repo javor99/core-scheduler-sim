@@ -187,8 +187,10 @@ const SimulationTimeline: React.FC<SimulationTimelineProps> = ({
               />
               <Tooltip 
                 formatter={(value, name) => {
-                  if (name.endsWith('_arrival') || name.endsWith('_deadline')) return null;
-                  return [value === 1 ? 'Running' : 'Idle', name];
+                  // Fix type error by checking if name is a string before using endsWith
+                  const nameStr = String(name);
+                  if (nameStr.endsWith('_arrival') || nameStr.endsWith('_deadline')) return null;
+                  return [value === 1 ? 'Running' : 'Idle', nameStr];
                 }}
                 labelFormatter={(label) => `Time: ${label}`}
               />
