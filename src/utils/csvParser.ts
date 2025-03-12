@@ -20,11 +20,14 @@ export const parseTasksFromCSV = (csvText: string): PeriodicTask[] => {
     // Skip empty lines
     if (line.length === 0) continue;
     
-    // Split by tab or multiple spaces
-    const parts = line.split(/\t+|\s+/).filter(part => part.trim().length > 0);
+    // Split by tab or multiple spaces or comma
+    const parts = line.split(/[\t,]+|\s+/).filter(part => part.trim().length > 0);
     
     // Ensure we have all required fields
-    if (parts.length < 5) continue;
+    if (parts.length < 5) {
+      console.log(`Skipping line with insufficient fields: ${line}`);
+      continue;
+    }
     
     const [taskName, bcetStr, wcetStr, periodStr, deadlineStr, priorityStr] = parts;
     
@@ -36,7 +39,11 @@ export const parseTasksFromCSV = (csvText: string): PeriodicTask[] => {
     const priority = priorityStr ? parseInt(priorityStr, 10) : undefined;
     
     // Skip if required fields are not valid numbers
-    if (isNaN(wcet) || isNaN(period) || isNaN(deadline)) continue;
+    if (isNaN(wcet) || isNaN(period) || isNaN(deadline)) {
+      console.log(`Skipping line with invalid numbers: ${line}`);
+      console.log(`Parsed values: WCET=${wcetStr}→${wcet}, Period=${periodStr}→${period}, Deadline=${deadlineStr}→${deadline}`);
+      continue;
+    }
     
     tasks.push({
       id: taskName,
@@ -48,6 +55,12 @@ export const parseTasksFromCSV = (csvText: string): PeriodicTask[] => {
       deadline,
       priority
     });
+  }
+  
+  // Log successfully parsed tasks for debugging
+  console.log(`Successfully parsed ${tasks.length} tasks`);
+  if (tasks.length > 0) {
+    console.log(`First task: ${JSON.stringify(tasks[0])}`);
   }
   
   return tasks;

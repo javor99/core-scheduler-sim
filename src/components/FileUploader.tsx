@@ -26,8 +26,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
+        console.log("File content:", content.substring(0, 200) + "..."); // Log first 200 chars
         
-        // Determine file type based on extension
+        // Determine file type based on extension or content
         const isCSV = file.name.toLowerCase().endsWith('.csv') || 
                      file.name.toLowerCase().endsWith('.txt') ||
                      (content.includes('Task') && content.includes('WCET'));
@@ -37,8 +38,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
         if (isCSV) {
           // Parse CSV content
           const tasks = parseTasksFromCSV(content);
+          console.log(`Parsed ${tasks.length} tasks from CSV`);
+          
           if (tasks.length === 0) {
-            throw new Error('No valid tasks found in the CSV file');
+            throw new Error('No valid tasks found in the CSV file. Check format: "Task BCET WCET Period Deadline Priority"');
           }
           
           parsedModel = createSystemModelFromTasks(tasks);
@@ -67,6 +70,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
         
         onFileLoaded(parsedModel);
       } catch (error) {
+        console.error("Error loading file:", error);
         toast({
           title: "Error Loading File",
           description: error instanceof Error ? error.message : "Invalid file format",
