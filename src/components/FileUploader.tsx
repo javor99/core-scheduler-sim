@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { SystemModel } from '@/types/system';
+import { parseTasksFromCSV, createSystemModelFromTasks } from '@/utils/csvParser';
 
 interface FileUploaderProps {
   onFileLoaded: (model: SystemModel) => void;
@@ -25,22 +26,46 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        const parsedModel = JSON.parse(content) as SystemModel;
         
-        // Basic validation
-        if (!parsedModel.cores || !Array.isArray(parsedModel.cores)) {
-          throw new Error('Invalid model format: missing or invalid cores array');
-        }
+        // Determine file type based on extension
+        const isCSV = file.name.toLowerCase().endsWith('.csv') || 
+                     file.name.toLowerCase().endsWith('.txt') ||
+                     (content.includes('Task') && content.includes('WCET'));
         
-        if (!parsedModel.rootComponents || !Array.isArray(parsedModel.rootComponents)) {
-          throw new Error('Invalid model format: missing or invalid rootComponents array');
+        let parsedModel: SystemModel;
+        
+        if (isCSV) {
+          // Parse CSV content
+          const tasks = parseTasksFromCSV(content);
+          if (tasks.length === 0) {
+            throw new Error('No valid tasks found in the CSV file');
+          }
+          
+          parsedModel = createSystemModelFromTasks(tasks);
+          toast({
+            title: "CSV Loaded Successfully",
+            description: `Loaded ${tasks.length} tasks from CSV file.`,
+          });
+        } else {
+          // Parse JSON content
+          parsedModel = JSON.parse(content) as SystemModel;
+          
+          // Basic validation
+          if (!parsedModel.cores || !Array.isArray(parsedModel.cores)) {
+            throw new Error('Invalid model format: missing or invalid cores array');
+          }
+          
+          if (!parsedModel.rootComponents || !Array.isArray(parsedModel.rootComponents)) {
+            throw new Error('Invalid model format: missing or invalid rootComponents array');
+          }
+          
+          toast({
+            title: "JSON Loaded Successfully",
+            description: `Loaded system model with ${parsedModel.cores.length} cores and ${parsedModel.rootComponents.length} root components.`,
+          });
         }
         
         onFileLoaded(parsedModel);
-        toast({
-          title: "File Loaded Successfully",
-          description: `Loaded system model with ${parsedModel.cores.length} cores and ${parsedModel.rootComponents.length} root components.`,
-        });
       } catch (error) {
         toast({
           title: "Error Loading File",
@@ -69,7 +94,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
               className="hidden"
               ref={fileInputRef}
               onChange={handleFileChange}
-              accept=".json"
+              accept=".json,.csv,.txt"
             />
             <Button 
               onClick={handleButtonClick}
@@ -86,15 +111,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             />
           </div>
           <p className="text-sm text-gray-500 mt-1">
-            Upload a JSON file containing your system model configuration.
+            Upload a JSON file with system model configuration, or a CSV/TXT file with task definitions.
           </p>
         </div>
         
         <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-          <h3 className="text-sm font-medium text-blue-800 mb-1">Expected File Format</h3>
+          <h3 className="text-sm font-medium text-blue-800 mb-1">Supported File Formats</h3>
           <p className="text-xs text-blue-700">
-            The JSON file should define cores, components, and tasks in the hierarchical scheduling system.
-            Each component specifies scheduling algorithm, tasks, and resource allocation parameters.
+            <strong>JSON:</strong> Complete system model with cores, components, and tasks.<br />
+            <strong>CSV/TXT:</strong> Task definitions in format "Task BCET WCET Period Deadline Priority"
           </p>
         </div>
       </div>

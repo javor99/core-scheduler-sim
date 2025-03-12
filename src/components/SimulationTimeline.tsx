@@ -187,7 +187,7 @@ const SimulationTimeline: React.FC<SimulationTimelineProps> = ({
               />
               <Tooltip 
                 formatter={(value, name) => {
-                  // Fix type error by checking if name is a string before using endsWith
+                  // Fix type error by converting name to string first
                   const nameStr = String(name);
                   if (nameStr.endsWith('_arrival') || nameStr.endsWith('_deadline')) return null;
                   return [value === 1 ? 'Running' : 'Idle', nameStr];
